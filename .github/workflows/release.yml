@@ -4,7 +4,7 @@ on:
     tags:
       - '*'
     branches:
-      - '1.*'
+      - 'release/*'
 
 permissions:
   contents: read
@@ -20,6 +20,10 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.14'
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -40,6 +44,23 @@ jobs:
       - name: Build CrossMux (international + Chinese)
         run: pio run -e gh_release -e gh_release_cn
 
+      - name: Publish CrossMux Sync Service single-file binaries
+        run: |
+          set -euo pipefail
+          PROJECT="sync-service/CrossMux.SyncService/CrossMux.SyncService.csproj"
+          dotnet publish "$PROJECT" -c Release -r win-x64 --self-contained true \
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:DebugType=None -p:DebugSymbols=false -o dist/service-win-x64
+          dotnet publish "$PROJECT" -c Release -r linux-x64 --self-contained true \
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:DebugType=None -p:DebugSymbols=false -o dist/service-linux-x64
+          test -f dist/service-win-x64/CrossMux.SyncService.exe
+          test -f dist/service-linux-x64/CrossMux.SyncService
+          chmod +x dist/service-linux-x64/CrossMux.SyncService
+          (cd dist/service-win-x64 && zip -9 ../CrossMux.SyncService-win-x64.zip CrossMux.SyncService.exe)
+          tar -C dist/service-linux-x64 -czf dist/CrossMux.SyncService-linux-x64.tar.gz CrossMux.SyncService
+          rm -rf dist/service-win-x64 dist/service-linux-x64
+
       - name: Stage release assets
         run: |
           mkdir -p dist
@@ -47,6 +68,8 @@ jobs:
           cp .pio/build/gh_release/bootloader.bin   dist/bootloader.bin
           cp .pio/build/gh_release/partitions.bin   dist/partitions.bin
           cp .pio/build/gh_release_cn/firmware.bin  dist/firmware-cn.bin
+          sha256sum dist/firmware.bin dist/firmware-cn.bin dist/bootloader.bin dist/partitions.bin \
+            dist/CrossMux.SyncService-win-x64.zip dist/CrossMux.SyncService-linux-x64.tar.gz > dist/SHA256SUMS.txt
 
       - name: Upload release build
         uses: actions/upload-artifact@v4
@@ -74,6 +97,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Resolve release version
+        id: release
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            VERSION="$GITHUB_REF_NAME"
+          else
+            VERSION="${GITHUB_REF_NAME#release/}"
+          fi
+          test -n "$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Download release build
         uses: actions/download-artifact@v4
         with:
@@ -82,7 +116,7 @@ jobs:
 
       - name: Read OTA release notes from tag
         run: |
-          if [ "$(git cat-file -t "$GITHUB_REF_NAME")" = "tag" ]; then
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$(git cat-file -t "$GITHUB_REF_NAME")" = "tag" ]; then
             git for-each-ref --format='%(contents)' "refs/tags/$GITHUB_REF_NAME" > ota-tag-message.txt
             python3 scripts/generate_ota_notes.py --input ota-tag-message.txt --output ota-notes.md
           else
@@ -96,7 +130,8 @@ jobs:
       - name: Build release notes
         run: |
           set -euo pipefail
-          CURATED_NOTES=".github/release-notes/${GITHUB_REF_NAME}.md"
+          VERSION="${{ steps.release.outputs.version }}"
+          CURATED_NOTES=".github/release-notes/${VERSION}.md"
           if [ -f "$CURATED_NOTES" ]; then
             cp "$CURATED_NOTES" release-body.md
           else
@@ -108,9 +143,9 @@ jobs:
                 git log --pretty=format:"- %s (\`%h\`)" --reverse "${PREV_TAG}..HEAD"
                 echo ""
                 echo ""
-                echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${{ github.ref_name }}"
+                echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${VERSION}"
               else
-                echo "## Initial release ${{ github.ref_name }}"
+                echo "## Initial release ${VERSION}"
               fi
             } > release-body.md
           fi
@@ -124,9 +159,9 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: CrossMux ${{ github.ref_name }}
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ steps.release.outputs.version }}
           target_commitish: ${{ github.sha }}
+          name: CrossMux ${{ steps.release.outputs.version }}
           files: dist/*
           fail_on_unmatched_files: true
           body_path: release-body.md
@@ -141,8 +176,8 @@ jobs:
         run: |
           bash scripts/publish-gitee-release.sh \
             "x1abin/crossmux" \
-            "${{ github.ref_name }}" \
-            "CrossMux ${{ github.ref_name }}" \
+            "${{ steps.release.outputs.version }}" \
+            "CrossMux ${{ steps.release.outputs.version }}" \
             "false" \
             "${{ github.sha }}" \
             "release-body.md" \
@@ -151,8 +186,11 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: CrossMux-${{ github.ref_name }}
+          name: CrossMux-${{ steps.release.outputs.version }}
           path: |
+            dist/CrossMux.SyncService-win-x64.zip
+            dist/CrossMux.SyncService-linux-x64.tar.gz
+            dist/SHA256SUMS.txt
             .pio/build/gh_release/bootloader.bin
             .pio/build/gh_release/firmware.bin
             .pio/build/gh_release/firmware.elf

@@ -4,7 +4,7 @@
 
 **CrossMux** 是 [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader) 的社区 fork：在原有电子书阅读体验之上，新增了一个 Apps 应用中心（小游戏 / 小工具）、更丰富的待机表盘，以及一套完整的简体中文固件。
 
-**版本：** CrossMux 1.5.8（基于 CrossPoint Reader 1.5.0，并同步上游 `develop` 至 `eef20504`）
+**版本：** CrossMux 1.5.9（基于 CrossPoint Reader 1.5.0，并同步上游 `develop` 至 `eef20504`）
 
 **运行设备：** 基于 ESP32-C3 的 Xteink [X4](https://www.xteink.com/products/xteink-x4) 与 [X3](https://www.xteink.com/products/xteink-x3)。
 
@@ -22,6 +22,8 @@
 - **待机表盘**：手绘风格的「潦草时钟」与中式老黄历表盘，并提供可选的 4 级灰度增强与反色显示模式。
 - **简体中文固件**（`gh_release_cn`）：中文 UI + i18n、内嵌 CJK 字体、面向中文的 EPUB 排版（断词与禁则等）。详见下方 [编译简体中文固件](#编译简体中文固件)。
 - **桌面模拟器**：可在电脑上开发与预览 UI。
+- **文件同步（1.5.8）**：从自建 CrossMux 同步服务拉取电子书与图片，利用 SHA-256 跳过未变化文件，并以安全替换方式避免中断下载破坏已有文件。
+- **智能待机页（1.5.9）**：订阅设备专属 MQTT 更新，把服务端渲染的天气、股票、歌词、图片和自定义数据看板实时显示为待机表盘。
 
 > **微信读书安全提示**：微信读书使用可能随时变化的非公开 Web 协议。真机通过
 > wolfSSL 加密传输，但调用 `setInsecure()`，不会验证服务器 CA 与主机身份，存在
@@ -29,6 +31,61 @@
 > 验证证书。
 
 上游 CrossPoint 的全部能力（EPUB 2/3 渲染、多格式支持、无线传书、OPDS、OTA 等）在 CrossMux 中同样可用，详见 [English README](./README.md#what-can-crosspoint-do)。
+
+---
+
+## CrossMux 1.5.8：文件同步
+
+CrossMux 1.5.8 新增从自建服务到阅读器的单向内容同步。服务端可通过网页或管理 API 上传电子书和图片；设备会把电子书下载到 SD 卡 `/Books`，把图片下载到 `/Images`。
+
+支持上传的格式：
+
+- 电子书：`.epub`、`.txt`、`.xtc`
+- 图片：`.png`、`.bmp`、`.jpg`、`.jpeg`（能否显示取决于打开文件的具体功能；原生文件浏览器支持 PNG 与 BMP）
+
+### 1. 启动同步服务
+
+使用 Docker 最便捷。对外提供服务前，请修改 `sync-service/docker-compose.yml` 中的 `Sync__ApiKey`，并将 `Sync__PublicBaseUrl` 设置为阅读器能够访问的地址。
+
+```bash
+cd sync-service
+docker compose up -d --build
+```
+
+浏览器打开 `http://服务器IP:8080/` 即可上传文件，也可以调用管理 API：
+
+```bash
+curl -X POST http://服务器IP:8080/api/admin/files \
+  -H "X-Api-Key: 你的_API_KEY" \
+  -F "file=@/path/to/book.epub"
+```
+
+不使用 Docker 时，可通过 .NET 直接运行：
+
+```bash
+cd sync-service
+Sync__ApiKey=change-me \
+Sync__PublicBaseUrl=http://192.168.1.10:8080 \
+dotnet run --project CrossMux.SyncService/CrossMux.SyncService.csproj
+```
+
+### 2. 配置阅读器并同步
+
+1. 将服务端与阅读器连接到同一个可信网络。真机必须填写电脑的局域网地址，不能使用 `localhost` 或 `127.0.0.1`。
+2. 打开阅读器内置的 Web 设置页面，填写 **文件同步服务器地址（File Sync Server URL）**，例如 `http://192.168.1.10:8080`；不需要附加 API 路径。
+3. 在阅读器上进入 **设置 > 系统 > 文件同步**，启动同步。
+4. 保持设备唤醒，直至显示同步结果。首次运行会下载匹配文件；后续同步会根据 SHA-256 跳过内容未变化的文件。
+
+下载过程使用临时文件与备份文件，因此传输中断不会覆盖有效的本地文件。服务端清单采用分页返回，以控制设备端内存占用。
+
+### 安全提示与故障排查
+
+- 上传与删除管理 API 必须提供 `X-Api-Key`；清单和下载接口为只读接口，按设计不要求管理密钥。建议仅在可信局域网使用；如需从互联网访问，请在服务前增加 HTTPS 与访问控制。
+- 如果清单中的下载地址指向错误主机，请修正 `Sync__PublicBaseUrl` 并重启服务。
+- 请确认阅读器能够访问 `http://服务器IP:8080/api/v1/sync/manifest?page=1&pageSize=10`，且 SD 卡有足够空间。
+- 兼容 OPDS 的客户端可通过 `http://服务器IP:8080/opds` 浏览电子书。
+
+完整配置说明见 [同步服务部署与 API 使用文档](./sync-service/README.md) 和 [设备同步协议](./docs/sync-service.md)。
 
 ---
 
@@ -133,6 +190,8 @@ pio run -e gh_release_cn -t upload
 ## 文档
 
 - [用户指南（英文）](./USER_GUIDE.md)
+- [文件同步服务](./sync-service/README.md)
+- [文件同步协议](./docs/sync-service.md)
 - [简体中文固件构建深度文档](./docs/engineering/chinese-build.md)
 - [Web 服务使用说明](./docs/webserver.md) · [Web 接口](./docs/webserver-endpoints.md)
 - [项目范围 SCOPE](./SCOPE.md) · [贡献文档](./docs/contributing/README.md)
