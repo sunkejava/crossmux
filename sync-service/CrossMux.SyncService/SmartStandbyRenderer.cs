@@ -2,13 +2,23 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 using SkiaSharp;
 
-sealed class SmartStandbyRenderer(ILogger<SmartStandbyRenderer> logger) {
+sealed class SmartStandbyRenderer : IDisposable {
+  readonly ILogger<SmartStandbyRenderer> logger;
+  readonly SKTypeface typeface;
   static readonly SKColor Paper = new(245, 244, 238);
   static readonly SKColor Ink = new(22, 24, 27);
   static readonly SKColor Muted = new(105, 108, 112);
   static readonly SKColor Line = new(195, 195, 188);
+
+  public SmartStandbyRenderer(IOptions<SmartStandbyOptions> configured, ILogger<SmartStandbyRenderer> logger) {
+    this.logger = logger;
+    typeface = ResolveTypeface(configured.Value, logger);
+  }
+
+  public void Dispose() => typeface.Dispose();
 
   public async Task<Dictionary<string, string>> ResolveValuesAsync(
     SmartStandbyTemplate template, HttpClient http, CancellationToken ct) {
@@ -77,7 +87,7 @@ sealed class SmartStandbyRenderer(ILogger<SmartStandbyRenderer> logger) {
     return EncodeBmp(bitmap);
   }
 
-  static void DrawWidget(SKCanvas canvas, SmartWidget widget, IReadOnlyDictionary<string, string> values,
+  void DrawWidget(SKCanvas canvas, SmartWidget widget, IReadOnlyDictionary<string, string> values,
     byte[]? imageBytes,
     int screenWidth, int screenHeight) {
     var rect = new SKRect(
@@ -127,9 +137,9 @@ sealed class SmartStandbyRenderer(ILogger<SmartStandbyRenderer> logger) {
     }
   }
 
-  static void DrawTextBlock(SKCanvas canvas, SKRect rect, string title, string value, float size, string align, SKColor color) {
-    using var titlePaint = new SKPaint { Color = color == Ink ? Muted : Paper, IsAntialias = true, TextSize = Math.Max(12, size * .42f), Typeface = SKTypeface.Default };
-    using var valuePaint = new SKPaint { Color = color, IsAntialias = true, TextSize = Math.Clamp(size, 12, 120), Typeface = SKTypeface.Default };
+  void DrawTextBlock(SKCanvas canvas, SKRect rect, string title, string value, float size, string align, SKColor color) {
+    using var titlePaint = new SKPaint { Color = color == Ink ? Muted : Paper, IsAntialias = true, TextSize = Math.Max(12, size * .42f), Typeface = typeface };
+    using var valuePaint = new SKPaint { Color = color, IsAntialias = true, TextSize = Math.Clamp(size, 12, 120), Typeface = typeface };
     var x = align.Equals("center", StringComparison.OrdinalIgnoreCase) ? rect.MidX : rect.Left + 14;
     titlePaint.TextAlign = valuePaint.TextAlign = align.Equals("center", StringComparison.OrdinalIgnoreCase) ? SKTextAlign.Center : SKTextAlign.Left;
     var y = rect.Top + 20 + titlePaint.TextSize;
@@ -142,9 +152,9 @@ sealed class SmartStandbyRenderer(ILogger<SmartStandbyRenderer> logger) {
     }
   }
 
-  static void DrawProgress(SKCanvas canvas, SKRect rect, string title, string value, SKColor color) {
+  void DrawProgress(SKCanvas canvas, SKRect rect, string title, string value, SKColor color) {
     var parsed = double.TryParse(value.TrimEnd('%'), NumberStyles.Float, CultureInfo.InvariantCulture, out var n) ? Math.Clamp(n, 0, 100) : 0;
-    using var text = new SKPaint { Color = color, IsAntialias = true, TextSize = 18 };
+    using var text = new SKPaint { Color = color, IsAntialias = true, TextSize = 18, Typeface = typeface };
     canvas.DrawText($"{title}  {parsed:0}%", rect.Left + 10, rect.Top + 24, text);
     var bar = new SKRect(rect.Left + 10, rect.Bottom - 20, rect.Right - 10, rect.Bottom - 8);
     using var track = new SKPaint { Color = Line };
@@ -184,23 +194,80 @@ sealed class SmartStandbyRenderer(ILogger<SmartStandbyRenderer> logger) {
 
   static SKColor ParseColor(string value, SKColor fallback) => SKColor.TryParse(value, out var color) ? color : fallback;
 
+  static SKTypeface ResolveTypeface(SmartStandbyOptions options, ILogger logger) {
+    if (!string.IsNullOrWhiteSpace(options.FontPath)) {
+      var path = Path.GetFullPath(options.FontPath);
+      if (File.Exists(path)) {
+        var fromFile = SKTypeface.FromFile(path);
+        if (fromFile is not null) {
+          logger.LogInformation("Smart standby font loaded from {FontPath}", path);
+          return fromFile;
+        }
+      }
+      logger.LogWarning("Smart standby FontPath is unavailable: {FontPath}", path);
+    }
+
+    var families = new List<string>();
+    if (!string.IsNullOrWhiteSpace(options.FontFamily)) families.Add(options.FontFamily);
+    if (OperatingSystem.IsWindows())
+      families.AddRange(["Microsoft YaHei UI", "Microsoft YaHei", "SimHei", "SimSun"]);
+    else if (OperatingSystem.IsLinux())
+      families.AddRange(["Noto Sans CJK SC", "Noto Sans SC", "WenQuanYi Micro Hei", "Source Han Sans SC"]);
+    else
+      families.AddRange(["PingFang SC", "Hiragino Sans GB"]);
+
+    foreach (var family in families) {
+      var candidate = SKTypeface.FromFamilyName(family);
+      if (candidate is null) continue;
+      if (candidate.FamilyName.Contains(family, StringComparison.OrdinalIgnoreCase) ||
+          family.Contains(candidate.FamilyName, StringComparison.OrdinalIgnoreCase)) {
+        logger.LogInformation("Smart standby font selected: {FontFamily}", candidate.FamilyName);
+        return candidate;
+      }
+      candidate.Dispose();
+    }
+    logger.LogWarning("No CJK font found; set SmartStandby__FontPath to a Chinese TTF/TTC/OTF file");
+    return SKTypeface.Default;
+  }
+
   static byte[] EncodeBmp(SKBitmap bitmap) {
-    var rowBytes = (bitmap.Width * 3 + 3) & ~3;
+    // The reader consumes four native gray levels. A 2-bpp paletted BMP is
+    // ~96 KiB at 800x480, versus ~1.15 MiB for the previous 24-bpp output.
+    var rowBytes = (bitmap.Width * 2 + 31) / 32 * 4;
     var imageBytes = rowBytes * bitmap.Height;
-    using var output = new MemoryStream(54 + imageBytes);
+    const int paletteBytes = 4 * 4;
+    const int pixelOffset = 54 + paletteBytes;
+    using var output = new MemoryStream(pixelOffset + imageBytes);
     using var writer = new BinaryWriter(output, Encoding.ASCII, true);
-    writer.Write((byte)'B'); writer.Write((byte)'M'); writer.Write(54 + imageBytes); writer.Write(0); writer.Write(54);
-    writer.Write(40); writer.Write(bitmap.Width); writer.Write(bitmap.Height); writer.Write((short)1); writer.Write((short)24);
-    writer.Write(0); writer.Write(imageBytes); writer.Write(2835); writer.Write(2835); writer.Write(0); writer.Write(0);
-    var padding = rowBytes - bitmap.Width * 3;
+    writer.Write((byte)'B'); writer.Write((byte)'M'); writer.Write(pixelOffset + imageBytes); writer.Write(0); writer.Write(pixelOffset);
+    writer.Write(40); writer.Write(bitmap.Width); writer.Write(bitmap.Height); writer.Write((short)1); writer.Write((short)2);
+    writer.Write(0); writer.Write(imageBytes); writer.Write(2835); writer.Write(2835); writer.Write(4); writer.Write(4);
+    foreach (var gray in new byte[] { 0, 85, 170, 255 }) {
+      writer.Write(gray); writer.Write(gray); writer.Write(gray); writer.Write((byte)0);
+    }
     for (var y = bitmap.Height - 1; y >= 0; --y) {
+      var packed = 0;
+      var bits = 6;
+      var written = 0;
       for (var x = 0; x < bitmap.Width; ++x) {
         var color = bitmap.GetPixel(x, y);
         var gray = (byte)Math.Clamp((color.Red * 299 + color.Green * 587 + color.Blue * 114) / 1000, 0, 255);
-        gray = gray < 64 ? (byte)0 : gray < 128 ? (byte)85 : gray < 192 ? (byte)170 : (byte)255;
-        writer.Write(gray); writer.Write(gray); writer.Write(gray);
+        var level = gray < 64 ? 0 : gray < 128 ? 1 : gray < 192 ? 2 : 3;
+        packed |= level << bits;
+        if (bits == 0) {
+          writer.Write((byte)packed);
+          packed = 0;
+          bits = 6;
+          ++written;
+        } else {
+          bits -= 2;
+        }
       }
-      for (var i = 0; i < padding; ++i) writer.Write((byte)0);
+      if (bits != 6) {
+        writer.Write((byte)packed);
+        ++written;
+      }
+      for (; written < rowBytes; ++written) writer.Write((byte)0);
     }
     return output.ToArray();
   }

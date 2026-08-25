@@ -58,6 +58,8 @@ SmartStandby:
   RefreshSeconds: 300
   MqttHost: mqtt-cn.uipcat.com
   MqttPort: 1883
+  FontPath: ""
+  FontFamily: ""
 ```
 
 Template values use `{{name}}`. A data-source binding maps a destination variable to a dotted JSON path:
@@ -74,3 +76,5 @@ Template values use `{{name}}`. A data-source binding maps a destination variabl
 ```
 
 Only connect data sources you trust. The service follows the configured URLs from the server network, so deployments exposed to multiple users should add a URL allowlist at the reverse proxy or application layer.
+
+On Windows, the renderer automatically prefers Microsoft YaHei for Chinese text. On a minimal Linux host, install a CJK font such as Noto Sans CJK, or set `SmartStandby__FontPath` to an absolute TTF/TTC/OTF path. Rendered dashboards use a native four-level 2-bpp BMP (about 96 KiB at 800×480) to reduce device download time.

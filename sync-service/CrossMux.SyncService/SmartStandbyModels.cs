@@ -5,6 +5,8 @@ sealed class SmartStandbyOptions {
   public int RefreshSeconds { get; set; } = 300;
   public string MqttHost { get; set; } = "mqtt-cn.uipcat.com";
   public int MqttPort { get; set; } = 1883;
+  public string FontPath { get; set; } = "";
+  public string FontFamily { get; set; } = "";
 }
 
 sealed record SmartStandbyTemplate(

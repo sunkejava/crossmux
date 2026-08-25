@@ -81,6 +81,8 @@ sealed class SmartStandbyPublisher(
   ILogger<SmartStandbyPublisher> logger) : BackgroundService {
   readonly SmartStandbyOptions options = configured.Value;
   readonly ConcurrentDictionary<string, SemaphoreSlim> deviceLocks = new(StringComparer.OrdinalIgnoreCase);
+  readonly IMqttClient mqttClient = new MqttFactory().CreateMqttClient();
+  readonly SemaphoreSlim mqttGate = new(1, 1);
 
   protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
     using var timer = new PeriodicTimer(TimeSpan.FromSeconds(Math.Clamp(options.RefreshSeconds, 30, 86400)));
@@ -110,15 +112,28 @@ sealed class SmartStandbyPublisher(
   }
 
   async Task PublishMqttAsync(SmartStandbyStatus status, CancellationToken ct) {
-    var factory = new MqttFactory();
-    using var client = factory.CreateMqttClient();
-    var builder = new MqttClientOptionsBuilder().WithTcpServer(options.MqttHost, options.MqttPort)
-      .WithClientId("crossmux-sync-" + Guid.NewGuid().ToString("N")[..12]).WithCleanSession();
-    await client.ConnectAsync(builder.Build(), ct);
-    var payload = JsonSerializer.SerializeToUtf8Bytes(status);
-    var message = new MqttApplicationMessageBuilder().WithTopic($"crossmux/device/{status.DeviceId}/standby/v1")
-      .WithPayload(payload).WithRetainFlag().WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce).Build();
-    await client.PublishAsync(message, ct);
-    await client.DisconnectAsync(new MqttClientDisconnectOptions(), ct);
+    await mqttGate.WaitAsync(ct);
+    try {
+      if (!mqttClient.IsConnected) {
+        var builder = new MqttClientOptionsBuilder().WithTcpServer(options.MqttHost, options.MqttPort)
+          .WithClientId("crossmux-sync-" + Guid.NewGuid().ToString("N")[..12]).WithCleanSession()
+          .WithKeepAlivePeriod(TimeSpan.FromSeconds(45));
+        await mqttClient.ConnectAsync(builder.Build(), ct);
+      }
+      var payload = JsonSerializer.SerializeToUtf8Bytes(status);
+      var message = new MqttApplicationMessageBuilder().WithTopic($"crossmux/device/{status.DeviceId}/standby/v1")
+        .WithPayload(payload).WithRetainFlag()
+        .WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce).Build();
+      await mqttClient.PublishAsync(message, ct);
+    } finally {
+      mqttGate.Release();
+    }
+  }
+
+  public override void Dispose() {
+    mqttClient.Dispose();
+    mqttGate.Dispose();
+    foreach (var item in deviceLocks.Values) item.Dispose();
+    base.Dispose();
   }
 }
