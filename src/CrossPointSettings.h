@@ -325,6 +325,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Base URL of the optional CrossMux file sync service. The service is
   // read-only from the device and publishes /api/v1/sync endpoints.
   char contentSyncServerUrl[128] = "";
+  // MQTT broker used by the Smart Standby face. Kept separate from the HTTP
+  // sync URL so a self-hosted service can use any anonymous MQTT broker.
+  char smartStandbyMqttHost[96] = "mqtt-cn.uipcat.com";
+  char smartStandbyMqttPort[6] = "1883";
   // Hide battery percentage
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press page turn button behavior

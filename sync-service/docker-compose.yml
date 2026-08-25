@@ -6,6 +6,10 @@ services:
     environment:
       Sync__ApiKey: "replace-with-a-long-random-key"
       Sync__PublicBaseUrl: "http://192.168.1.10:8080"
+      SmartStandby__MqttHost: "mqtt-cn.uipcat.com"
+      SmartStandby__MqttPort: "1883"
+      SmartStandby__RefreshSeconds: "300"
     volumes:
       - ./data:/app/data
+      - ./smart-standby:/app/smart-standby
     restart: unless-stopped

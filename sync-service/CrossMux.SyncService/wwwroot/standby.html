@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CrossMux Studio · 智能待机页</title>
+  <style>
+    :root{color-scheme:dark;--bg:#0b0d12;--panel:#141821;--line:#282e3a;--ink:#f5f7fb;--muted:#929bad;--accent:#8dd0ff;--good:#9ee6bb}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 80% 0,#15283a 0,transparent 34%),var(--bg);color:var(--ink);font:14px Inter,system-ui,sans-serif}
+    header{height:68px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;border-bottom:1px solid var(--line);background:#0b0d12cc;backdrop-filter:blur(16px);position:sticky;top:0;z-index:2}
+    .brand{font-size:19px;font-weight:700;letter-spacing:.2px}.brand i{font-style:normal;color:var(--accent)}.shell{display:grid;grid-template-columns:310px minmax(520px,1fr) 360px;gap:18px;padding:20px;max-width:1600px;margin:auto}
+    .card{background:linear-gradient(145deg,#171b24,#11151c);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 18px 50px #0004}.card h2{font-size:15px;margin:0 0 14px}.muted{color:var(--muted)}
+    label{display:block;color:var(--muted);font-size:12px;margin:13px 0 6px}input,select,textarea,button{font:inherit;border-radius:9px;border:1px solid var(--line)}input,select,textarea{width:100%;padding:10px 11px;background:#0d1118;color:var(--ink)}textarea{min-height:330px;resize:vertical;font:12px ui-monospace,monospace;line-height:1.5}
+    button{padding:10px 14px;background:#202734;color:var(--ink);cursor:pointer}button.primary{background:var(--accent);color:#06131d;border:0;font-weight:700}button.good{background:var(--good);color:#092015;border:0;font-weight:700}.row{display:flex;gap:9px}.row>*{flex:1}
+    .previewWrap{display:grid;place-items:center;min-height:620px}.device{background:#0b0b0c;border-radius:25px;padding:34px 24px 44px;box-shadow:0 40px 90px #000b;border:1px solid #2c3038}.screen{width:min(800px,54vw);aspect-ratio:5/3;background:#e8e7e0;display:grid;place-items:center;overflow:hidden}.screen img{width:100%;height:100%;object-fit:contain;image-rendering:auto}.empty{color:#555;text-align:center}
+    .template{padding:11px;border:1px solid var(--line);border-radius:10px;margin:8px 0;cursor:pointer}.template.active{border-color:var(--accent);background:#182633}.status{min-height:20px;margin-top:12px;color:var(--good)}
+    @media(max-width:1100px){.shell{grid-template-columns:1fr}.screen{width:min(800px,82vw)}.previewWrap{min-height:auto}}
+  </style>
+</head>
+<body>
+<header><div class="brand">CrossMux <i>Studio</i></div><div class="muted">智能待机页 · 模板、数据源与实时推送</div></header>
+<main class="shell">
+  <section class="card"><h2>模板</h2><div id="templates"></div><button onclick="preset('weather')">＋ 天气模板</button> <button onclick="preset('market')">＋ 股票模板</button> <button onclick="preset('lyrics')">＋ 歌词模板</button></section>
+  <section class="card previewWrap"><div class="device"><div class="screen" id="screen"><div class="empty">保存并推送后显示设备预览</div></div></div></section>
+  <section class="card"><h2>模板配置</h2><div class="row"><div><label>管理 API Key</label><input id="key" type="password"></div><div><label>设备 ID</label><input id="deviceId"></div></div><label>模板名称</label><input id="name"><label>模板 JSON</label><textarea id="json"></textarea><div class="row" style="margin-top:12px"><button class="primary" onclick="save()">保存模板</button><button class="good" onclick="publishNow()">立即渲染并推送</button></div><div class="status" id="status"></div><p class="muted">数据绑定使用 <code>{{变量}}</code>。DataSources 可从 HTTP JSON 的点路径提取天气、行情、歌词等字段。MQTT 只发送版本通知，设备通过 HTTP 下载最终 BMP。</p></section>
+</main>
+<script>
+let current=null,all=[];const $=id=>document.getElementById(id);const headers=()=>({'Content-Type':'application/json','X-Api-Key':$('key').value});
+const presets={
+weather:{name:'每日天气',values:{city:'东京',weather:'晴',temp:'26°',range:'21° / 28°',tip:'适合散步，记得补水'},widgets:[{type:'text',x:38,y:34,width:500,height:70,title:'{{city}} · 今日天气',value:'{{date}}',fontSize:24},{type:'text',x:38,y:120,width:420,height:180,value:'{{temp}}  {{weather}}',fontSize:62},{type:'text',x:500,y:128,width:260,height:140,title:'温度范围',value:'{{range}}',fontSize:32,border:true},{type:'text',x:38,y:330,width:724,height:105,title:'生活建议',value:'{{tip}}',fontSize:27,inverted:true}]},
+market:{name:'市场看板',values:{symbol:'000001 上证指数',price:'3,428.87',change:'+0.86%',volume:'成交额 6,842 亿'},widgets:[{type:'text',x:38,y:32,width:724,height:75,title:'MARKET SNAPSHOT',value:'{{time}}',fontSize:22},{type:'text',x:38,y:125,width:724,height:190,title:'{{symbol}}',value:'{{price}}',fontSize:76,border:true},{type:'text',x:38,y:340,width:340,height:90,value:'{{change}}',fontSize:42,inverted:true},{type:'text',x:400,y:340,width:362,height:90,value:'{{volume}}',fontSize:26,border:true}]},
+lyrics:{name:'歌词卡片',values:{song:'正在播放',artist:'CrossMux Music',line1:'风吹过书页，也吹亮远方',line2:'此刻的旋律，留在屏幕中央'},widgets:[{type:'text',x:45,y:42,width:710,height:70,title:'NOW PLAYING',value:'{{song}} · {{artist}}',fontSize:27},{type:'divider',x:45,y:125,width:710,height:2},{type:'text',x:45,y:170,width:710,height:230,value:'{{line1}}\n{{line2}}',fontSize:38,align:'center'},{type:'text',x:45,y:420,width:710,height:35,value:'{{time}}',fontSize:16,align:'center'}]}}
+function base(p){return {id:'template-'+Date.now(),name:p.name,deviceId:$('deviceId').value||'REPLACE_DEVICE_ID',width:800,height:480,background:'#f5f4ee',widgets:p.widgets,dataSources:[],values:p.values,enabled:true}}
+function preset(type){edit(base(presets[type]))}function edit(t){current=t;$('deviceId').value=t.deviceId;$('name').value=t.name;$('json').value=JSON.stringify(t,null,2);renderList()}
+function renderList(){$('templates').innerHTML=all.map(t=>`<div class="template ${current&&t.id===current.id?'active':''}" onclick="select('${t.id}')"><b>${t.name}</b><div class="muted">${t.deviceId}</div></div>`).join('')||'<p class="muted">尚无已保存模板</p>'}
+function select(id){edit(all.find(x=>x.id===id))}async function load(){let r=await fetch('/api/admin/standby/templates',{headers:{'X-Api-Key':$('key').value}});if(r.ok){all=await r.json();renderList()}}
+function read(){let t=JSON.parse($('json').value);t.deviceId=$('deviceId').value;t.name=$('name').value;return t}
+async function save(){try{let r=await fetch('/api/admin/standby/templates',{method:'POST',headers:headers(),body:JSON.stringify(read())});let body=await r.json();if(!r.ok)throw Error(body.error||r.statusText);current=body;$('status').textContent='模板已保存';await load()}catch(e){$('status').textContent='保存失败：'+e.message}}
+async function publishNow(){try{if(!current||current.id!==read().id)await save();let t=read();let r=await fetch(`/api/admin/standby/templates/${encodeURIComponent(t.id)}/publish`,{method:'POST',headers:{'X-Api-Key':$('key').value}});let body=await r.json();if(!r.ok)throw Error(body.error||r.statusText);$('screen').innerHTML=`<img src="${body.imageUrl}&r=${Date.now()}">`;$('status').textContent='已渲染并通过 MQTT 推送，版本 '+body.version}catch(e){$('status').textContent='推送失败：'+e.message}}
+$('key').addEventListener('change',load);load();preset('weather');
+</script></body></html>

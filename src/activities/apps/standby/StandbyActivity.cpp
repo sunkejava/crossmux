@@ -22,6 +22,7 @@
 #include "ChineseCalendarFace.h"
 #endif
 #include "SloppyClockFace.h"
+#include "SmartStandbyFace.h"
 #include "StandbyTime.h"
 #include "WifiCredentialStore.h"
 #include "components/UITheme.h"
@@ -39,16 +40,20 @@ constexpr uint32_t kSyncDelayMs = 1500u;
 // orientation-only). When a face is unavailable it is skipped during cycling
 // and the bottom pager-dot strip collapses accordingly.
 struct FaceEntry {
-  std::unique_ptr<StandbyFace> (*create)();
+  std::unique_ptr<StandbyFace> (*create)(GfxRenderer& renderer);
   bool (*isAvailable)(int sw, int sh);
 };
 constexpr FaceEntry kFaces[] = {
-    {[]() -> std::unique_ptr<StandbyFace> { return makeUniqueNoThrow<SloppyClockFace>(); },
+    {[](GfxRenderer&) -> std::unique_ptr<StandbyFace> { return makeUniqueNoThrow<SloppyClockFace>(); },
      [](int, int) { return true; }},
 #ifdef ENABLE_CHINESE_VERSION
-    {[]() -> std::unique_ptr<StandbyFace> { return makeUniqueNoThrow<ChineseCalendarFace>(); },
+    {[](GfxRenderer&) -> std::unique_ptr<StandbyFace> { return makeUniqueNoThrow<ChineseCalendarFace>(); },
      [](int sw, int sh) { return sh > sw; }},  // portrait only
 #endif
+    {[](GfxRenderer& renderer) -> std::unique_ptr<StandbyFace> {
+       return makeUniqueNoThrow<SmartStandbyFace>(renderer);
+     },
+     [](int, int) { return SETTINGS.contentSyncServerUrl[0] != '\0'; }},
 };
 constexpr uint8_t kFaceCount = static_cast<uint8_t>(sizeof(kFaces) / sizeof(kFaces[0]));
 
@@ -112,7 +117,7 @@ void StandbyActivity::onEnter() {
     if (idx < kFaceCount) faceIndex_ = idx;
   }
   inverseMode_ = false;
-  currentFace_ = kFaces[faceIndex_].create();
+  currentFace_ = kFaces[faceIndex_].create(renderer);
   if (!currentFace_) {
     LOG_ERR("STANDBY", "OOM allocating face");
     activityManager.goToApps();
@@ -163,7 +168,7 @@ void StandbyActivity::switchFace(int8_t delta) {
   if (currentFace_) currentFace_->onExit();
   currentFace_.reset();
   faceIndex_ = newIdx;
-  currentFace_ = kFaces[faceIndex_].create();
+  currentFace_ = kFaces[faceIndex_].create(renderer);
   if (!currentFace_) {
     LOG_ERR("STANDBY", "OOM switching face");
     activityManager.goToApps();

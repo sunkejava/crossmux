@@ -384,6 +384,10 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
         // the on-device System settings list.
         SettingInfo::String(StrId::STR_FILE_SYNC_SERVER_URL, &SETTINGS.contentSyncServerUrl[0],
                             sizeof(SETTINGS.contentSyncServerUrl), "contentSyncServerUrl", StrId::STR_CAT_SYSTEM),
+        SettingInfo::String(StrId::STR_SMART_STANDBY_MQTT_HOST, &SETTINGS.smartStandbyMqttHost[0],
+                            sizeof(SETTINGS.smartStandbyMqttHost), "smartStandbyMqttHost", StrId::STR_CAT_SYSTEM),
+        SettingInfo::String(StrId::STR_SMART_STANDBY_MQTT_PORT, &SETTINGS.smartStandbyMqttPort[0],
+                            sizeof(SETTINGS.smartStandbyMqttPort), "smartStandbyMqttPort", StrId::STR_CAT_SYSTEM),
 
         // Frontlight quick-panel state is persisted and web-exposed, but the
         // panel owns its on-device editing UI.

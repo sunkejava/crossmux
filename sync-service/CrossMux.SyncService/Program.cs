@@ -7,13 +7,20 @@ using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.Configure<SyncOptions>(builder.Configuration.GetSection("Sync"));
+builder.Services.Configure<SmartStandbyOptions>(builder.Configuration.GetSection("SmartStandby"));
 builder.Services.AddSingleton<FileCatalog>();
+builder.Services.AddSingleton<SmartStandbyStore>();
+builder.Services.AddSingleton<SmartStandbyRenderer>();
+builder.Services.AddSingleton<SmartStandbyPublisher>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<SmartStandbyPublisher>());
+builder.Services.AddHttpClient("smart-standby", client => client.Timeout = TimeSpan.FromSeconds(12));
 builder.Services.Configure<FormOptions>(form => form.MultipartBodyLengthLimit =
   builder.Configuration.GetValue<long?>("Sync:MaxUploadBytes") ?? 100 * 1024 * 1024);
 
 var app = builder.Build();
 var options = app.Services.GetRequiredService<IOptions<SyncOptions>>().Value;
 Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, options.StoragePath));
+app.UseStaticFiles();
 
 app.Use(async (context, next) => {
   if (context.Request.Path.StartsWithSegments("/api/admin") &&
@@ -27,6 +34,7 @@ app.Use(async (context, next) => {
 });
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", utc = DateTimeOffset.UtcNow }));
+app.MapGet("/standby", () => Results.Redirect("/standby.html"));
 
 app.MapGet("/api/v1/sync/manifest", async (HttpRequest request, FileCatalog catalog, CancellationToken ct) => {
   var page = Math.Max(1, ParsePositive(request.Query["page"], 1));
@@ -72,6 +80,29 @@ app.MapPost("/api/admin/files", async (HttpRequest request, FileCatalog catalog,
 app.MapDelete("/api/admin/files/{id}", async (string id, FileCatalog catalog, CancellationToken ct) =>
   await catalog.DeleteAsync(id, ct) ? Results.NoContent() : Results.NotFound());
 
+app.MapGet("/api/admin/standby/templates", async (SmartStandbyStore store, CancellationToken ct) =>
+  Results.Ok(await store.ListAsync(ct)));
+
+app.MapPost("/api/admin/standby/templates", async (SmartStandbyTemplate template, SmartStandbyStore store,
+  CancellationToken ct) => {
+  try { return Results.Ok(await store.SaveAsync(template, ct)); }
+  catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+});
+
+app.MapPost("/api/admin/standby/templates/{id}/publish", async (string id, HttpRequest request,
+  SmartStandbyStore store, SmartStandbyPublisher publisher, CancellationToken ct) => {
+  var template = await store.FindAsync(id, ct);
+  if (template is null) return Results.NotFound();
+  return Results.Ok(await publisher.RenderAndPublishAsync(template, ResolveBaseUrl(request, options), ct));
+});
+
+app.MapGet("/api/v1/standby/{deviceId}/image.bmp", (string deviceId, SmartStandbyStore store) => {
+  try {
+    var path = store.ImagePath(deviceId);
+    return path is null ? Results.NotFound() : Results.File(path, "image/bmp", enableRangeProcessing: true);
+  } catch (ArgumentException) { return Results.BadRequest(); }
+});
+
 app.MapGet("/opds", async (HttpRequest request, FileCatalog catalog, CancellationToken ct) => {
   var books = await catalog.ScanAsync("book", ct);
   var baseUrl = ResolveBaseUrl(request, options);
@@ -104,7 +135,7 @@ app.MapGet("/opds", async (HttpRequest request, FileCatalog catalog, Cancellatio
 app.MapGet("/", () => Results.Content("""
 <!doctype html><html><head><meta charset="utf-8"><title>CrossMux Sync</title>
 <style>body{font:16px system-ui;max-width:720px;margin:48px auto;padding:0 20px}input,select,button{font:inherit;padding:8px;margin:4px}</style></head>
-<body><h1>CrossMux Sync</h1><p>Upload an ebook or image for device synchronization.</p>
+<body><h1>CrossMux Sync</h1><p>Upload an ebook or image for device synchronization.</p><p><a href="/standby">Open Smart Standby Studio</a></p>
 <form id="f"><input id="key" type="password" placeholder="API key"><select id="type"><option value="auto">Auto detect</option><option value="book">Book</option><option value="image">Image</option></select><input id="file" type="file" required><button>Upload</button></form><pre id="out"></pre>
 <script>f.onsubmit=async e=>{e.preventDefault();let d=new FormData();d.append('file',file.files[0]);d.append('type',type.value);let r=await fetch('/api/admin/files',{method:'POST',headers:{'X-Api-Key':key.value},body:d});out.textContent=await r.text()}</script></body></html>
 """, "text/html; charset=utf-8"));
