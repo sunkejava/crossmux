@@ -273,8 +273,8 @@ bool ContentSyncActivity::syncItem(const char* id, const char* targetPath, const
 
 void ContentSyncActivity::render(RenderLock&&) {
   renderer.clearScreen();
-  const auto& metrics = GUI.getMetrics();
-  const Rect safeArea = GUI.getScreenSafeArea(renderer, true, false);
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const Rect safeArea = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   GUI.drawHeader(renderer, Rect{safeArea.x, safeArea.y + metrics.topPadding, safeArea.width, metrics.headerHeight},
                  tr(STR_FILE_SYNC));
   const Rect content = SubpageLayout::contentRect(safeArea, metrics);
