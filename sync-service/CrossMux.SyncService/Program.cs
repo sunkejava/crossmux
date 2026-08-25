@@ -20,7 +20,6 @@ builder.Services.Configure<FormOptions>(form => form.MultipartBodyLengthLimit =
 var app = builder.Build();
 var options = app.Services.GetRequiredService<IOptions<SyncOptions>>().Value;
 Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, options.StoragePath));
-app.UseStaticFiles();
 
 app.Use(async (context, next) => {
   if (context.Request.Path.StartsWithSegments("/api/admin") &&
@@ -34,7 +33,8 @@ app.Use(async (context, next) => {
 });
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", utc = DateTimeOffset.UtcNow }));
-app.MapGet("/standby", () => Results.Redirect("/standby.html"));
+app.MapGet("/standby", () => Results.Content(SmartStandbyPage.Html, "text/html; charset=utf-8"));
+app.MapGet("/standby.html", () => Results.Content(SmartStandbyPage.Html, "text/html; charset=utf-8"));
 
 app.MapGet("/api/v1/sync/manifest", async (HttpRequest request, FileCatalog catalog, CancellationToken ct) => {
   var page = Math.Max(1, ParsePositive(request.Query["page"], 1));

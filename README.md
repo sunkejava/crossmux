@@ -4,7 +4,7 @@
 
 **CrossMux** is a community fork of [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader) that turns the device into more than a reader — it adds an Apps hub of mini-games and tools, richer standby faces, and a first-class Simplified Chinese build.
 
-**Version:** CrossMux 1.5.8 (based on CrossPoint Reader 1.5.0 plus upstream `develop` through `eef20504`)
+**Version:** CrossMux 1.5.9 (based on CrossPoint Reader 1.5.0 plus upstream `develop` through `eef20504`)
 
 **Now running on:** ESP32C3-based Xteink [X4](https://www.xteink.com/products/xteink-x4) and [X3](https://www.xteink.com/products/xteink-x3).
 
@@ -19,6 +19,7 @@ What CrossMux adds on top of upstream:
 - **Simplified Chinese firmware** (`gh_release_cn`): Chinese UI + i18n, embedded CJK fonts, and CJK-aware EPUB layout (word breaking and line-break rules). See [Build the Simplified Chinese firmware](#build-the-simplified-chinese-firmware).
 - **Desktop simulator** for developing and previewing the UI on the host.
 - **File Sync (1.5.8)**: pull ebooks and images from a self-hosted CrossMux sync service, skip unchanged files by SHA-256, and safely replace changed files without leaving partial downloads.
+- **Smart Standby (1.5.9)**: subscribe to device-specific MQTT updates and display server-rendered weather, market, lyrics, image, and custom-data dashboards as a live standby face.
 
 > **WeRead security notice:** WeRead uses an unofficial Web protocol that may
 > change without notice. Device builds encrypt traffic with wolfSSL but call

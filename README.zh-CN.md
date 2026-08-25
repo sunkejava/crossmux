@@ -4,7 +4,7 @@
 
 **CrossMux** 是 [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader) 的社区 fork：在原有电子书阅读体验之上，新增了一个 Apps 应用中心（小游戏 / 小工具）、更丰富的待机表盘，以及一套完整的简体中文固件。
 
-**版本：** CrossMux 1.5.8（基于 CrossPoint Reader 1.5.0，并同步上游 `develop` 至 `eef20504`）
+**版本：** CrossMux 1.5.9（基于 CrossPoint Reader 1.5.0，并同步上游 `develop` 至 `eef20504`）
 
 **运行设备：** 基于 ESP32-C3 的 Xteink [X4](https://www.xteink.com/products/xteink-x4) 与 [X3](https://www.xteink.com/products/xteink-x3)。
 
@@ -23,6 +23,7 @@
 - **简体中文固件**（`gh_release_cn`）：中文 UI + i18n、内嵌 CJK 字体、面向中文的 EPUB 排版（断词与禁则等）。详见下方 [编译简体中文固件](#编译简体中文固件)。
 - **桌面模拟器**：可在电脑上开发与预览 UI。
 - **文件同步（1.5.8）**：从自建 CrossMux 同步服务拉取电子书与图片，利用 SHA-256 跳过未变化文件，并以安全替换方式避免中断下载破坏已有文件。
+- **智能待机页（1.5.9）**：订阅设备专属 MQTT 更新，把服务端渲染的天气、股票、歌词、图片和自定义数据看板实时显示为待机表盘。
 
 > **微信读书安全提示**：微信读书使用可能随时变化的非公开 Web 协议。真机通过
 > wolfSSL 加密传输，但调用 `setInsecure()`，不会验证服务器 CA 与主机身份，存在
