@@ -18,12 +18,66 @@ What CrossMux adds on top of upstream:
 - **Standby faces**: a hand-drawn "sloppy" clock and a Chinese almanac/calendar face (老黄历), with optional 4-level grayscale enhancement and inverse display.
 - **Simplified Chinese firmware** (`gh_release_cn`): Chinese UI + i18n, embedded CJK fonts, and CJK-aware EPUB layout (word breaking and line-break rules). See [Build the Simplified Chinese firmware](#build-the-simplified-chinese-firmware).
 - **Desktop simulator** for developing and previewing the UI on the host.
+- **File Sync (1.5.8)**: pull ebooks and images from a self-hosted CrossMux sync service, skip unchanged files by SHA-256, and safely replace changed files without leaving partial downloads.
 
 > **WeRead security notice:** WeRead uses an unofficial Web protocol that may
 > change without notice. Device builds encrypt traffic with wolfSSL but call
 > `setInsecure()`, so they do not verify the server CA or host identity and are
 > vulnerable to man-in-the-middle attacks. Use WeRead only on a trusted network.
 > The native simulator verifies certificates through libcurl's host trust store.
+
+## CrossMux 1.5.8: File Sync
+
+CrossMux 1.5.8 adds one-way content synchronization from a self-hosted service to the reader. The service accepts ebooks and images through its browser UI or admin API; the device downloads ebooks to `/Books` and images to `/Images` on the SD card.
+
+Supported uploads:
+
+- Ebooks: `.epub`, `.txt`, `.xtc`
+- Images: `.png`, `.bmp`, `.jpg`, `.jpeg` (display support depends on the feature opening the file; the native file browser handles PNG and BMP)
+
+### 1. Start the sync service
+
+Docker is the quickest option. Before exposing the service, change `Sync__ApiKey` in `sync-service/docker-compose.yml` and set `Sync__PublicBaseUrl` to an address the reader can reach.
+
+```bash
+cd sync-service
+docker compose up -d --build
+```
+
+The browser UI is available at `http://SERVER_IP:8080/`. Upload a file there, or use the admin API:
+
+```bash
+curl -X POST http://SERVER_IP:8080/api/admin/files \
+  -H "X-Api-Key: YOUR_API_KEY" \
+  -F "file=@/path/to/book.epub"
+```
+
+For local development without Docker:
+
+```bash
+cd sync-service
+Sync__ApiKey=change-me \
+Sync__PublicBaseUrl=http://192.168.1.10:8080 \
+dotnet run --project CrossMux.SyncService/CrossMux.SyncService.csproj
+```
+
+### 2. Configure and sync the reader
+
+1. Put the service and reader on the same trusted network. On a physical reader, use the computer's LAN address—not `localhost` or `127.0.0.1`.
+2. Open the reader's built-in web settings page and set **File Sync Server URL**, for example `http://192.168.1.10:8080` (no trailing API path is needed).
+3. On the reader, open **Settings > System > File Sync** and start synchronization.
+4. Keep the reader awake until the result appears. The first run downloads matching files; later runs skip files whose SHA-256 hash has not changed.
+
+Downloads use temporary and backup files so an interrupted transfer does not replace a valid local copy. The server manifest is paginated to limit device memory use.
+
+### Security and troubleshooting
+
+- The upload/delete admin API requires `X-Api-Key`; manifest and download endpoints are read-only and intentionally do not require the admin key. Use the service on a trusted LAN, or place it behind HTTPS and access control before routing it over the internet.
+- If the manifest contains the wrong host, correct `Sync__PublicBaseUrl` and restart the service.
+- Verify that the reader can reach `http://SERVER_IP:8080/api/v1/sync/manifest?page=1&pageSize=10` and that the SD card has free space.
+- OPDS-compatible clients can browse ebooks at `http://SERVER_IP:8080/opds`.
+
+See [sync service deployment and API usage](./sync-service/README.md) and the [device synchronization protocol](./docs/sync-service.md) for complete configuration details.
 
 ---
 
@@ -155,6 +209,8 @@ Conversion runs the firmware repo's `lib/EpdFont/scripts/fontconvert_sdcard.py` 
 ## Documentation
 
 - [User Guide](./USER_GUIDE.md)
+- [File sync service](./sync-service/README.md)
+- [File sync protocol](./docs/sync-service.md)
 - [Web server usage](./docs/webserver.md)
 - [Web server endpoints](./docs/webserver-endpoints.md)
 - [Project scope](./SCOPE.md)
