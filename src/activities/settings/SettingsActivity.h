@@ -20,6 +20,7 @@ enum class SettingAction {
   AppVisibility,
   KOReaderSync,
   OPDSBrowser,
+  ContentSync,
   Network,
   DateTime,
   ClearCache,

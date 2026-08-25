@@ -1,0 +1,41 @@
+name: Sync Service CI
+
+on:
+  push:
+    paths:
+      - "sync-service/**"
+      - ".github/workflows/sync-service-ci.yml"
+  pull_request:
+    paths:
+      - "sync-service/**"
+      - ".github/workflows/sync-service-ci.yml"
+
+jobs:
+  build-and-smoke-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sync-service/CrossMux.SyncService
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet build -c Release
+      - name: Start service
+        run: |
+          Sync__StoragePath="${RUNNER_TEMP}/crossmux-sync-data" dotnet run -c Release --no-build --urls http://127.0.0.1:5080 >"${RUNNER_TEMP}/crossmux-sync.log" 2>&1 &
+          echo $! >"${RUNNER_TEMP}/crossmux-sync.pid"
+      - name: Smoke test
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:5080/health | grep -q '"status":"ok"'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "${RUNNER_TEMP}/crossmux-sync.log"
+          exit 1
+      - name: Stop service
+        if: always()
+        run: kill "$(cat "${RUNNER_TEMP}/crossmux-sync.pid")" 2>/dev/null || true
