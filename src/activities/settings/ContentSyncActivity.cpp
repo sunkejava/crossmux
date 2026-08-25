@@ -121,8 +121,7 @@ void ContentSyncActivity::onExit() {
 void ContentSyncActivity::launchWifiSelection() {
   auto activity = makeUniqueNoThrow<WifiSelectionActivity>(renderer, mappedInput);
   if (!activity) {
-    LOG_ERR("FILESYNC", "OOM: WifiSelectionActivity (%u bytes)",
-            static_cast<unsigned>(sizeof(WifiSelectionActivity)));
+    LOG_ERR("FILESYNC", "OOM: WifiSelectionActivity (%u bytes)", static_cast<unsigned>(sizeof(WifiSelectionActivity)));
     state = State::Failed;
     requestUpdate();
     return;
@@ -213,8 +212,7 @@ bool ContentSyncActivity::syncPage(const int page, bool& hasMore) {
     const char* downloadUrl = item["downloadUrl"] | "";
     const size_t expectedSize = item["size"] | 0;
     if (!isHexId(id) || !isSafeTargetPath(targetPath) || !isHexSha256(sha256) ||
-        (strncmp(downloadUrl, "http://", 7) != 0 && strncmp(downloadUrl, "https://", 8) != 0) ||
-        expectedSize == 0) {
+        (strncmp(downloadUrl, "http://", 7) != 0 && strncmp(downloadUrl, "https://", 8) != 0) || expectedSize == 0) {
       LOG_ERR("FILESYNC", "Rejected invalid manifest item");
       ++failedCount;
       continue;
@@ -226,8 +224,8 @@ bool ContentSyncActivity::syncPage(const int page, bool& hasMore) {
   return true;
 }
 
-bool ContentSyncActivity::syncItem(const char* id, const char* targetPath, const char* sha256,
-                                   const char* downloadUrl, const size_t expectedSize) {
+bool ContentSyncActivity::syncItem(const char* id, const char* targetPath, const char* sha256, const char* downloadUrl,
+                                   const size_t expectedSize) {
   char marker[80];
   char markerValue[65];
   markerPath(marker, sizeof(marker), id);

@@ -228,8 +228,7 @@ void SettingsActivity::rebuildSettingsLists() {
       // device UI owns them in the Date & Time submenu.
       if (setting.valuePtr == &CrossPointSettings::clockAutoSync ||
           setting.valuePtr == &CrossPointSettings::clockUtcOffsetQ ||
-          setting.valuePtr == &CrossPointSettings::clockFormat ||
-          setting.nameId == StrId::STR_FILE_SYNC_SERVER_URL) {
+          setting.valuePtr == &CrossPointSettings::clockFormat || setting.nameId == StrId::STR_FILE_SYNC_SERVER_URL) {
         continue;
       }
       systemSettings.push_back(setting);
