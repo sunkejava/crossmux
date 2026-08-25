@@ -380,6 +380,10 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
         SettingInfo::Enum(StrId::STR_OPDS_FILENAME_FORMAT, &CrossPointSettings::opdsFilenameFormat,
                           {StrId::STR_FMT_AUTHOR_TITLE, StrId::STR_FMT_TITLE_AUTHOR, StrId::STR_FMT_TITLE},
                           "opdsFilenameFormat"),
+        // File sync is configured from the web settings page and launched from
+        // the on-device System settings list.
+        SettingInfo::String(StrId::STR_FILE_SYNC_SERVER_URL, &SETTINGS.contentSyncServerUrl[0],
+                            sizeof(SETTINGS.contentSyncServerUrl), "contentSyncServerUrl", StrId::STR_CAT_SYSTEM),
 
         // Frontlight quick-panel state is persisted and web-exposed, but the
         // panel owns its on-device editing UI.

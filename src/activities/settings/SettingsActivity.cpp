@@ -15,6 +15,7 @@
 #include "AppVisibilitySettingsActivity.h"
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
+#include "ContentSyncActivity.h"
 #include "CrossPointSettings.h"
 #include "DateTimeSettingsActivity.h"
 #include "DictionaryDownloadActivity.h"
@@ -227,7 +228,8 @@ void SettingsActivity::rebuildSettingsLists() {
       // device UI owns them in the Date & Time submenu.
       if (setting.valuePtr == &CrossPointSettings::clockAutoSync ||
           setting.valuePtr == &CrossPointSettings::clockUtcOffsetQ ||
-          setting.valuePtr == &CrossPointSettings::clockFormat) {
+          setting.valuePtr == &CrossPointSettings::clockFormat ||
+          setting.nameId == StrId::STR_FILE_SYNC_SERVER_URL) {
         continue;
       }
       systemSettings.push_back(setting);
@@ -244,6 +246,7 @@ void SettingsActivity::rebuildSettingsLists() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_DATE_AND_TIME, SettingAction::DateTime));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_FILE_SYNC, SettingAction::ContentSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   // Keep the existing CrossMux OTA proxy flow. Build-only boards compile this
   // UI but are intentionally absent from release assets in this sync.
@@ -648,6 +651,9 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::OPDSBrowser:
         startActivityForResultWith<OpdsServerListActivity>(resultHandler);
+        break;
+      case SettingAction::ContentSync:
+        startActivityForResultWith<ContentSyncActivity>(resultHandler);
         break;
       case SettingAction::Network:
         startActivityForResultWith<WifiSelectionActivity>(resultHandler, false);

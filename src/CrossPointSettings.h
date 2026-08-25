@@ -322,6 +322,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // 2=Title). See OpdsFilenameFormat. Persisted via a category-less SettingInfo::Enum,
   // edited from the OPDS server list; hidden from the on-device Settings screen.
   uint8_t opdsFilenameFormat = 0;
+  // Base URL of the optional CrossMux file sync service. The service is
+  // read-only from the device and publishes /api/v1/sync endpoints.
+  char contentSyncServerUrl[128] = "";
   // Hide battery percentage
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press page turn button behavior
