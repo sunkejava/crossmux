@@ -3,6 +3,8 @@ on:
   push:
     tags:
       - '*'
+    branches:
+      - '1.*'
 
 permissions:
   contents: read
@@ -123,6 +125,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: CrossMux ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          target_commitish: ${{ github.sha }}
           files: dist/*
           fail_on_unmatched_files: true
           body_path: release-body.md
