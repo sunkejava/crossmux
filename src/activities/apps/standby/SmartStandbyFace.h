@@ -15,7 +15,7 @@ class SmartStandbyFace final : public StandbyFace {
   void onExit() override;
   bool tick() override;
   void render(GfxRenderer& renderer, const Rect& viewport) override;
-  StrId titleId() const override { return STR_SMART_STANDBY; }
+  StrId titleId() const override { return StrId::STR_SMART_STANDBY; }
   uint32_t secondsUntilNextWake() const override { return 60; }
   bool wantsGrayscale() const override { return true; }
 
